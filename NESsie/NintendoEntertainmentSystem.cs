@@ -12,9 +12,6 @@ namespace NESsie
         public NintendoEntertainmentSystem()
         {
             this.CPU = new CPU6502();
-            this.PPU = new PixelProcessingUnit();
-            this.APU = new AudioProcessingUnit();
-            this.Memory = new Memory();
         }
     }
 }
