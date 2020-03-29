@@ -32,6 +32,7 @@ namespace NESsie.Components
         ushort ProgramCounter = 0x00;
         byte StackPointer = 0x00;
 
+        byte opcode = 0x00;
         byte aluInput = 0x00;
         ushort absoluteAddress = 0x000; // The absolute memory address to be used in the current operation at any given time.
         ushort relativeAddress = 0x000; // The relative memory address to be used in the current branching operation if there is one.
@@ -58,34 +59,6 @@ namespace NESsie.Components
                 new Instruction(CPX, IMM, 2), new Instruction(SBC, IZX, 6), null, null, new Instruction(CPX, ZP0, 3), new Instruction(SBC, ZP0, 3), new Instruction(INC, ZP0, 5), null, new Instruction(IZX, IMP, 2), new Instruction(SBC, IMM, 2), new Instruction(NOP, IMP, 2), null, new Instruction(CPX, ABS, 4), new Instruction(SBC, ABS, 4), new Instruction(INC, ABS, 6), null,
                 new Instruction(BEQ, REL, 2), new Instruction(SBC, IZY, 5), null, null, null, new Instruction(SBC, ZPX, 4), new Instruction(INC, ZPX, 6), null, new Instruction(SED, IMP, 2), new Instruction(SBC, ABY, 4), null, null, null, new Instruction(SBC, ABX, 4), new Instruction(INC, ABX, 7), null
             };
-        }
-
-        // Clock: Get the next instruction and execute it
-        public void PerformClockCycle()
-        {
-            if(Cycles == 0)
-            {
-                // The U flag is always 1.
-                this.SetFlag(FLAGS6502.U, true);
-
-                var opcode = this.Bus.Read(this.ProgramCounter);
-                
-                // Increment PC as the opcode byte has now been read from the bus.
-                this.ProgramCounter++;
-
-                // Get the amount of cycles required to perform the current instruction.
-                var instruction = this.InstructionSetOpCodeMatrix[opcode];
-                this.Cycles = instruction.Cycles;
-                var additionalCycleRequiredByAddressMode = instruction.AddressMode();
-                var additionalCycleRequiredByOperation = instruction.Operate();
-                this.Cycles += additionalCycleRequiredByAddressMode & additionalCycleRequiredByOperation;
-
-                // The U flag is always 1.
-                SetFlag(FLAGS6502.U, true);
-            }
-
-            // The current cycle has now finished. Decrement the remaining number of cycles required to perform the current instruction.
-            this.Cycles--;
         }
 
         /// <summary>
@@ -125,6 +98,44 @@ namespace NESsie.Components
             {
                 this.ProcessorStatus &= flag;
             }
+        }
+
+        private void GetAluInput()
+        {
+            // There is no point in getting ALU input for implied address mode because there is no ALU input to get.
+            if(this.InstructionSetOpCodeMatrix[opcode].AddressMode == IMP)
+            {
+                this.aluInput = this.Bus.Read(this.absoluteAddress);
+            }
+        }
+
+        // Clock: Get the next instruction and execute it
+        public void PerformClockCycle()
+        {
+            if (Cycles == 0)
+            {
+                // The U flag is always 1.
+                this.SetFlag(FLAGS6502.U, true);
+
+                // Set the opcode byte for the current instuction.
+                this.opcode = this.Bus.Read(this.ProgramCounter);
+
+                // Increment PC as the opcode byte has now been read from the bus.
+                this.ProgramCounter++;
+
+                // Get the amount of cycles required to perform the current instruction.
+                var instruction = this.InstructionSetOpCodeMatrix[opcode];
+                this.Cycles = instruction.Cycles;
+                var additionalCycleRequiredByAddressMode = instruction.AddressMode();
+                var additionalCycleRequiredByOperation = instruction.Operate();
+                this.Cycles += additionalCycleRequiredByAddressMode & additionalCycleRequiredByOperation;
+
+                // The U flag is always 1.
+                SetFlag(FLAGS6502.U, true);
+            }
+
+            // The current cycle has now finished. Decrement the remaining number of cycles required to perform the current instruction.
+            this.Cycles--;
         }
 
         /// <summary>
@@ -297,7 +308,19 @@ namespace NESsie.Components
         }
 
         byte ADC() { return 0; }
-        byte AND() { return 0; }
+        /// <summary>
+        /// Instruction: Bitwise logic AND
+        /// Function: A & M
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte AND()
+        {
+            this.GetAluInput();
+            this.A = (byte)(this.A & this.aluInput);
+            this.SetFlag(FLAGS6502.N, true);
+            this.SetFlag(FLAGS6502.Z, true);
+            return 1;
+        }
         byte ASL() { return 0; }
         byte BCC() { return 0; }
         byte BCS() { return 0; }
@@ -309,13 +332,92 @@ namespace NESsie.Components
         byte BRK() { return 0; }
         byte BVC() { return 0; }
         byte BVS() { return 0; }
-        byte CLC() { return 0; }
-        byte CLD() { return 0; }
-        byte CLI() { return 0; }
-        byte CLV() { return 0; }
-        byte CMP() { return 0; }
-        byte CPX() { return 0; }
-        byte CPY() { return 0; }
+        /// <summary>
+        /// Instruction: Clears the Cary flag.
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CLC()
+        {
+            this.SetFlag(FLAGS6502.C, false);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Clears the decimal flag.
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CLD()
+        {
+            this.SetFlag(FLAGS6502.D, false);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Clears the Interrupt Disable flag.
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CLI()
+        {
+            this.SetFlag(FLAGS6502.I, false);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Clears the Overflow flag.
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CLV()
+        {
+            this.SetFlag(FLAGS6502.V, false);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Compare accumulator with memory.
+        /// Function: A - M
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CMP()
+        {
+            this.GetAluInput();
+            var temp = this.A - this.aluInput;
+            var isPageBoundaryReached = this.A >= temp;
+            var isAccumulatorZero = (temp & 0x00FF) == 0x0000;
+            var isAccumulatorNegative = (temp & 0x0080) == 0x0080; // Accumulator is negative if the most significant bit is set.
+            this.SetFlag(FLAGS6502.C, isPageBoundaryReached);
+            this.SetFlag(FLAGS6502.Z, isAccumulatorZero);
+            this.SetFlag(FLAGS6502.N, isAccumulatorNegative);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Compare X register with memory.
+        /// Function: X - M
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CPX()
+        {
+            this.GetAluInput();
+            var temp = this.X - this.aluInput;
+            var isPageBoundaryReached = this.X >= temp;
+            var isRegisterZero = (temp & 0x00FF) == 0x0000;
+            var isRegisterNegative = (temp & 0x0080) == 0x0080; // X register is negative if the most significant bit is set.
+            this.SetFlag(FLAGS6502.C, isPageBoundaryReached);
+            this.SetFlag(FLAGS6502.Z, isRegisterZero);
+            this.SetFlag(FLAGS6502.N, isRegisterNegative);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Compare Y register with memory.
+        /// Function: X - Y
+        /// </summary>
+        /// <returns>Whether or not this is a potential candidate for an additional clock cycle. 1 if it is, 0 if not.</returns>
+        byte CPY() {
+            this.GetAluInput();
+            var temp = this.Y - this.aluInput;
+            var isPageBoundaryCrossed = this.Y >= temp;
+            var isRegisterZero = (temp & 0x00FF) == 0x0000;
+            var isRegisterNegative = (temp & 0x0080) == 0x0080; // Y register is negative if the most significant bit is set.
+            this.SetFlag(FLAGS6502.C, isPageBoundaryCrossed);
+            this.SetFlag(FLAGS6502.Z, isRegisterZero);
+            this.SetFlag(FLAGS6502.N, isRegisterNegative);
+            return 0;
+        }
         byte DEC() { return 0; }
         byte DEX() { return 0; }
         byte DEY() { return 0; }
