@@ -8,7 +8,6 @@ namespace NESsie
 
         public NintendoEntertainmentSystem()
         {
-            this.CPU = new CPU6502(new Memory(new Mapper()));
         }
     }
 }
