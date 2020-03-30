@@ -6,59 +6,61 @@ namespace NESsie.Components
 
     public class CPU6502
     {
-        class Instruction
-        {
-            public Func<byte> Operate;
-            public Func<byte> AddressMode;
-            public ushort Cycles;
+        public bool Verbose;
 
-            public Instruction(Func<byte> operation, Func<byte> addressMode, ushort cycles)
-            {
-                this.Operate = operation;
-                this.AddressMode = addressMode;
-                this.Cycles = cycles;
-            }
+        public int Cycles { get; private set; }
+        public bool HasCompleted()
+        {
+            var hasCompleted = this.Cycles == 0;
+            return hasCompleted;
         }
 
-        public int Cycles { private get; set; }
-        public int Clock { get; set; }
         Bus Bus { get; set; }
-        readonly Instruction[] InstructionSetOpCodeMatrix;
+        public readonly CpuInstruction[] InstructionSetOpcodeMatrix;
 
-        byte A = 0x00;  // A register
-        byte X = 0x00;  // X register
-        byte Y = 0x00;  // Y register
-        byte ProcessorStatus = 0x00;
-        ushort ProgramCounter = 0x00;
-        byte StackPointer = 0x00;
+        public byte A { get; private set; } = 0x00;  // A register
+        public byte X { get; private set; } = 0x00;  // X register
+        public byte Y { get; private set; } = 0x00;  // Y register
+        public byte ProcessorStatus { get; private set; } = 0x00;
+        public ushort ProgramCounter { get; private set; } = 0x00;
+        public byte StackPointer { get; private set; } = 0x00;
 
-        byte opcode = 0x00;
+        public byte Opcode { get; private set; } = 0x00;
         byte aluInput = 0x00;
         ushort absoluteAddress = 0x000; // The absolute memory address to be used in the current operation at any given time.
         ushort relativeAddress = 0x000; // The relative memory address to be used in the current branching operation if there is one.
 
-        public CPU6502(Bus bus)
+        public CPU6502()
+        {
+            this.InstructionSetOpcodeMatrix = new CpuInstruction[]
+            {
+                instr(BRK, IMP, 7), instr(ORA, INX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ORA, ZP0, 3), instr(ASL, ZP0, 5), instr(XXX, IMP, 2), instr(PHP, IMP, 3), instr(ORA, IMM, 2), instr(ASL, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ORA, ABS, 4), instr(ASL, ABS, 6), instr(XXX, IMP, 2),
+                instr(BPL, REL, 2), instr(ORA, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ORA, ZPX, 4), instr(ASL, ZPX, 4), instr(XXX, IMP, 2), instr(CLC, IMP, 2), instr(ORA, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ORA, ABX, 4), instr(ASL, ABX, 7), instr(XXX, IMP, 2),
+                instr(JSR, ABS, 6), instr(AND, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(BIT, ZP0, 3), instr(AND, ZP0, 3), instr(ROL, ZP0, 5), instr(XXX, IMP, 2), instr(PLP, IMP, 4), instr(AND, IMM, 2), instr(ROL, IMP, 2), instr(XXX, IMP, 2), instr(BIT, ABS, 4), instr(AND, ABS, 4), instr(ROL, ABS, 6), instr(ROL, ABS, 6), instr(XXX, IMP, 2),
+                instr(BMI, REL, 2), instr(AND, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(AND, ZPX, 4), instr(ROL, ZPX, 6), instr(XXX, IMP, 2), instr(SEC, IMP, 2), instr(AND, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(AND, ABX, 4), instr(ROL, ABX, 7), instr(XXX, IMP, 2),
+                instr(RTI, IMP, 6), instr(EOR, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(EOR, ZP0, 3), instr(LSR, ZP0, 5), instr(XXX, IMP, 2), instr(PHA, IMP, 3), instr(EOR, IMM, 2), instr(LSR, IMP, 2), instr(XXX, IMP, 2), instr(JMP, ABS, 3), instr(EOR, ABS, 4), instr(LSR, ABS, 6), instr(XXX, IMP, 2),
+                instr(BVC, REL, 2), instr(EOR, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(EOR, ZPX, 4), instr(LSR, ZPX, 6), instr(XXX, IMP, 2), instr(CLI, IMP, 2), instr(EOR, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(EOR, ABX, 4), instr(LSR, ABX, 7), instr(XXX, IMP, 2),
+                instr(RTS, IMP, 6), instr(ADC, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ADC, ZP0, 3), instr(ROR, ZP0, 5), instr(XXX, IMP, 2), instr(PLA, IMP, 4), instr(ADC, IMM, 2), instr(ROR, IMP, 2), instr(XXX, IMP, 2), instr(JMP, IND, 5), instr(ADC, ABS, 4), instr(ROR, ABS, 6), instr(XXX, IMP, 2),
+                instr(BVS, REL, 2), instr(ADC, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ADC, ZPX, 4), instr(ROR, ZPX, 6), instr(XXX, IMP, 2), instr(SEI, IMP, 2), instr(ADC, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(ADC, ABX, 4), instr(ROR, ABX, 7), instr(XXX, IMP, 2),
+                instr(XXX, IMP, 2), instr(STA, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(STY, ZP0, 3), instr(STA, ZP0, 3), instr(STX, ZP0, 3), instr(XXX, IMP, 2), instr(DEY, IMP, 2), instr(XXX, IMP, 2), instr(TXA, IMP, 2), instr(XXX, IMP, 2), instr(STY, ABS, 4), instr(STA, ABS, 4), instr(STX, ABS, 4), instr(XXX, IMP, 2),
+                instr(BCC, REL, 2), instr(STA, IZY, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(STY, ZPX, 4), instr(STA, ZPX, 4), instr(STX, ZPY, 4), instr(XXX, IMP, 2), instr(TYA, IMP, 2), instr(STA, ABY, 5), instr(TXS, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(STA, ABX, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2),
+                instr(LDY, IMM, 2), instr(LDA, IZX, 6), instr(LDX, IMM, 2), instr(XXX, IMP, 2), instr(LDY, ZP0, 3), instr(LDA, ZP0, 3), instr(LDX, ZP0, 3), instr(XXX, IMP, 2), instr(TAY, IMP, 2), instr(LDA, IMM, 2), instr(TAX, IMP, 2), instr(XXX, IMP, 2), instr(LDY, ABS, 4), instr(LDA, ABS, 4), instr(LDX, ABS, 4), instr(XXX, IMP, 2),
+                instr(BCS, REL, 2), instr(LDA, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(LDY, ZPX, 4), instr(LDA, ZPX, 4), instr(LDX, ZPY, 4), instr(XXX, IMP, 2), instr(CLV, IMP, 2), instr(LDA, ABY, 4), instr(TSX, IMP, 2), instr(XXX, IMP, 2), instr(LDY, ABX, 4), instr(LDA, ABX, 4), instr(LDX, ABY, 4), instr(XXX, IMP, 2),
+                instr(CPY, IMM, 2), instr(CMP, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(CPY, ZP0, 3), instr(CMP, ZP0, 3), instr(DEC, ZP0, 5), instr(XXX, IMP, 2), instr(IZY, IMP, 2), instr(CMP, IMM, 2), instr(DEX, IMP, 2), instr(XXX, IMP, 2), instr(CPY, ABS, 4), instr(CMP, ABS, 4), instr(DEC, ABS, 6), instr(XXX, IMP, 2),
+                instr(BNE, REL, 2), instr(CMP, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(CMP, ZPX, 3), instr(DEC, ZPX, 6), instr(XXX, IMP, 2), instr(CLD, IMP, 2), instr(CMP, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(CMP, ABX, 4), instr(DEC, ABX, 7), instr(XXX, IMP, 2),
+                instr(CPX, IMM, 2), instr(SBC, IZX, 6), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(CPX, ZP0, 3), instr(SBC, ZP0, 3), instr(INC, ZP0, 5), instr(XXX, IMP, 2), instr(IZX, IMP, 2), instr(SBC, IMM, 2), instr(NOP, IMP, 2), instr(XXX, IMP, 2), instr(CPX, ABS, 4), instr(SBC, ABS, 4), instr(INC, ABS, 6), instr(XXX, IMP, 2),
+                instr(BEQ, REL, 2), instr(SBC, IZY, 5), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(SBC, ZPX, 4), instr(INC, ZPX, 6), instr(XXX, IMP, 2), instr(SED, IMP, 2), instr(SBC, ABY, 4), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(XXX, IMP, 2), instr(SBC, ABX, 4), instr(INC, ABX, 7), instr(XXX, IMP, 2)
+            };
+        }
+
+        private CpuInstruction instr(Func<byte> instruction, Func<byte> addressMode, ushort cycles)
+        {
+            return new CpuInstruction(instruction, addressMode, cycles);
+        }
+
+        public void ConnectToBus(Bus bus)
         {
             this.Bus = bus;
-            this.InstructionSetOpCodeMatrix = new Instruction[]
-            {
-                new Instruction(BRK, IMP, 7), new Instruction(ORA, INX, 6), null, null, null, new Instruction(ORA, ZP0, 3), new Instruction(ASL, ZP0, 5), null, new Instruction(PHP, IMP, 3), new Instruction(ORA, IMM, 2), new Instruction(ASL, IMP, 2), null, null, new Instruction(ORA, ABS, 4), new Instruction(ASL, ABS, 6), null,
-                new Instruction(BPL, REL, 2), new Instruction(ORA, IZY, 5), null, null, null, new Instruction(ORA, ZPX, 4), new Instruction(ASL, ZPX, 4), null, new Instruction(CLC, IMP, 2), new Instruction(ORA, ABY, 4), null, null, null, new Instruction(ORA, ABX, 4), new Instruction(ASL, ABX, 7), null,
-                new Instruction(JSR, ABS, 6), new Instruction(AND, IZX, 6), null, null, new Instruction(BIT, ZP0, 3), new Instruction(AND, ZP0, 3), new Instruction(ROL, ZP0, 5), null, new Instruction(PLP, IMP, 4), new Instruction(AND, IMM, 2), new Instruction(ROL, IMP, 2), null, new Instruction(BIT, ABS, 4), new Instruction(AND, ABS, 4), new Instruction(ROL, ABS, 6), new Instruction(ROL, ABS, 6), null,
-                new Instruction(BMI, REL, 2), new Instruction(AND, IZY, 5), null, null, null, new Instruction(AND, ZPX, 4), new Instruction(ROL, ZPX, 6), null, new Instruction(SEC, IMP, 2), new Instruction(AND, ABY, 4), null, null, null, new Instruction(AND, ABX, 4), new Instruction(ROL, ABX, 7), null,
-                new Instruction(RTI, IMP, 6), new Instruction(EOR, IZX, 6), null, null, null, new Instruction(EOR, ZP0, 3), new Instruction(LSR, ZP0, 5), null, new Instruction(PHA, IMP, 3), new Instruction(EOR, IMM, 2), new Instruction(LSR, IMP, 2), null, new Instruction(JMP, ABS, 3), new Instruction(EOR, ABS, 4), new Instruction(LSR, ABS, 6), null,
-                new Instruction(BVC, REL, 2), new Instruction(EOR, IZY, 5), null, null, null, new Instruction(EOR, ZPX, 4), new Instruction(LSR, ZPX, 6), null, new Instruction(CLI, IMP, 2), new Instruction(EOR, ABY, 4), null, null, null, new Instruction(EOR, ABX, 4), new Instruction(LSR, ABX, 7), null,
-                new Instruction(RTS, IMP, 6), new Instruction(ADC, IZX, 6), null, null, null, new Instruction(ADC, ZP0, 3), new Instruction(ROR, ZP0, 5), null, new Instruction(PLA, IMP, 4), new Instruction(ADC, IMM, 2), new Instruction(ROR, IMP, 2), null, new Instruction(JMP, IND, 5), new Instruction(ADC, ABS, 4), new Instruction(ROR, ABS, 6), null,
-                new Instruction(BVS, REL, 2), new Instruction(ADC, IZY, 5), null, null, null, new Instruction(ADC, ZPX, 4), new Instruction(ROR, ZPX, 6), null, new Instruction(SEI, IMP, 2), new Instruction(ADC, ABY, 4), null, null, null, new Instruction(ADC, ABX, 4), new Instruction(ROR, ABX, 7), null,
-                null, new Instruction(STA, IZX, 6), null, null, new Instruction(STY, ZP0, 3), new Instruction(STA, ZP0, 3), new Instruction(STX, ZP0, 3), null, new Instruction(DEY, IMP, 2), null, new Instruction(TXA, IMP, 2), null, new Instruction(STY, ABS, 4), new Instruction(STA, ABS, 4), new Instruction(STX, ABS, 4), null,
-                new Instruction(BCC, REL, 2), new Instruction(STA, IZY, 6), null, null, new Instruction(STY, ZPX, 4), new Instruction(STA, ZPX, 4), new Instruction(STX, ZPY, 4), null, new Instruction(TYA, IMP, 2), new Instruction(STA, ABY, 5), new Instruction(TXS, IMP, 2), null, null, new Instruction(STA, ABX, 5), null, null,
-                new Instruction(LDY, IMM, 2), new Instruction(LDA, IZX, 6), new Instruction(LDX, IMM, 2), null, new Instruction(LDY, ZP0, 3), new Instruction(LDA, ZP0, 3), new Instruction(LDX, ZP0, 3), null, new Instruction(TAY, IMP, 2), new Instruction(LDA, IMM, 2), new Instruction(TAX, IMP, 2), null, new Instruction(LDY, ABS, 4), new Instruction(LDA, ABS, 4), new Instruction(LDX, ABS, 4), null,
-                new Instruction(BCS, REL, 2), new Instruction(LDA, IZY, 5), null, null, new Instruction(LDY, ZPX, 4), new Instruction(LDA, ZPX, 4), new Instruction(LDX, ZPY, 4), null, new Instruction(CLV, IMP, 2), new Instruction(LDA, ABY, 4), new Instruction(TSX, IMP, 2), null, new Instruction(LDY, ABX, 4), new Instruction(LDA, ABX, 4), new Instruction(LDX, ABY, 4), null,
-                new Instruction(CPY, IMM, 2), new Instruction(CMP, IZX, 6), null, null, new Instruction(CPY, ZP0, 3), new Instruction(CMP, ZP0, 3), new Instruction(DEC, ZP0, 5), null, new Instruction(IZY, IMP, 2), new Instruction(CMP, IMM, 2), new Instruction(DEX, IMP, 2), null, new Instruction(CPY, ABS, 4), new Instruction(CMP, ABS, 4), new Instruction(DEC, ABS, 6), null,
-                new Instruction(BNE, REL, 2), new Instruction(CMP, IZY, 5), null, null, null, new Instruction(CMP, ZPX, 3), new Instruction(DEC, ZPX, 6), null, new Instruction(CLD, IMP, 2), new Instruction(CMP, ABY, 4), null, null, null, new Instruction(CMP, ABX, 4), new Instruction(DEC, ABX, 7), null,
-                new Instruction(CPX, IMM, 2), new Instruction(SBC, IZX, 6), null, null, new Instruction(CPX, ZP0, 3), new Instruction(SBC, ZP0, 3), new Instruction(INC, ZP0, 5), null, new Instruction(IZX, IMP, 2), new Instruction(SBC, IMM, 2), new Instruction(NOP, IMP, 2), null, new Instruction(CPX, ABS, 4), new Instruction(SBC, ABS, 4), new Instruction(INC, ABS, 6), null,
-                new Instruction(BEQ, REL, 2), new Instruction(SBC, IZY, 5), null, null, null, new Instruction(SBC, ZPX, 4), new Instruction(INC, ZPX, 6), null, new Instruction(SED, IMP, 2), new Instruction(SBC, ABY, 4), null, null, null, new Instruction(SBC, ABX, 4), new Instruction(INC, ABX, 7), null
-            };
         }
 
         /// <summary>
@@ -71,7 +73,7 @@ namespace NESsie.Components
             return value;
         }
 
-        private bool hasMemoryPageChanged(byte highByte)
+        private bool HasMemoryPageChanged(byte highByte)
         {
             // We check to see whether or not the address changes the page by creating a mask for the four left-most bits and comparing it with the highByte shifted to the left by 8.
             if ((this.absoluteAddress & 0xFF00) != (highByte << 8))
@@ -96,21 +98,22 @@ namespace NESsie.Components
                 this.ProcessorStatus |= flag;
             } else
             {
-                this.ProcessorStatus &= flag;
+                this.ProcessorStatus &= (byte)~flag;
             }
         }
 
         private void GetAluInput()
         {
             // There is no point in getting ALU input for implied address mode because there is no ALU input to get.
-            if(this.InstructionSetOpCodeMatrix[opcode].AddressMode == IMP)
+            var instruction = this.InstructionSetOpcodeMatrix[Opcode + 1];
+            if(instruction.AddressMode != IMP)
             {
                 this.aluInput = this.Bus.Read(this.absoluteAddress);
             }
         }
 
         // Clock: Get the next instruction and execute it
-        public void PerformClockCycle()
+        public void Clock()
         {
             if (Cycles == 0)
             {
@@ -118,13 +121,14 @@ namespace NESsie.Components
                 this.SetFlag(FLAGS6502.U, true);
 
                 // Set the opcode byte for the current instuction.
-                this.opcode = this.Bus.Read(this.ProgramCounter);
+                this.Opcode = this.Bus.Read(this.ProgramCounter);
 
                 // Increment PC as the opcode byte has now been read from the bus.
                 this.ProgramCounter++;
 
-                // Get the amount of cycles required to perform the current instruction.
-                var instruction = this.InstructionSetOpCodeMatrix[opcode];
+                // Get the amount of cycles required to perform the current instruction. Add 1 when looking up the instruction since the matrix is null indexed.
+                var instruction = this.InstructionSetOpcodeMatrix[Opcode + 1];
+
                 this.Cycles = instruction.Cycles;
                 var additionalCycleRequiredByAddressMode = instruction.AddressMode();
                 var additionalCycleRequiredByOperation = instruction.Operate();
@@ -136,6 +140,29 @@ namespace NESsie.Components
 
             // The current cycle has now finished. Decrement the remaining number of cycles required to perform the current instruction.
             this.Cycles--;
+        }
+
+        public void Reset()
+        {
+            this.absoluteAddress = 0xFD;
+            ushort absaddr2 = (ushort)(absoluteAddress + 1);
+            var lowByte = this.Bus.Read(absoluteAddress);
+            var highByte = this.Bus.Read(absaddr2);
+
+            this.ProgramCounter = this.ConvertTo16BitValue(highByte, lowByte);
+
+            this.A = 0x00;
+            this.X = 0x00;
+            this.Y = 0x00;
+            this.StackPointer = 0xFD;
+            this.ProcessorStatus = (byte)(0x00 | FLAGS6502.U);
+
+            this.relativeAddress = 0x0000;
+            this.absoluteAddress = 0x0000;
+            this.aluInput = 0x00;
+
+            // The required amount of cycles to perform a CPU reset.
+            this.Cycles = 8;
         }
 
         /// <summary>
@@ -214,7 +241,7 @@ namespace NESsie.Components
             this.ProgramCounter++;
             this.absoluteAddress = (ushort)(this.ConvertTo16BitValue(highByte, lowByte) + this.X);
 
-            if (hasMemoryPageChanged(highByte))
+            if (HasMemoryPageChanged(highByte))
             {
                 return 1;
             }
@@ -231,7 +258,7 @@ namespace NESsie.Components
             this.ProgramCounter++;
             this.absoluteAddress = (ushort)(this.ConvertTo16BitValue(highByte, lowByte) + this.Y);
 
-            if (hasMemoryPageChanged(highByte))
+            if (HasMemoryPageChanged(highByte))
             {
                 return 1;
             }
@@ -307,6 +334,11 @@ namespace NESsie.Components
             return 0;
         }
 
+        /// <summary>
+        /// Dummy instruction
+        /// </summary>
+        /// <returns></returns>
+        byte XXX() { return 0; }
         byte ADC() { return 0; }
         /// <summary>
         /// Instruction: Bitwise logic AND
@@ -427,10 +459,53 @@ namespace NESsie.Components
         byte INY() { return 0; }
         byte JMP() { return 0; }
         byte JSR() { return 0; }
-        byte LDA() { return 0; }
-        byte LDX() { return 0; }
-        byte LDY() { return 0; }
+        /// <summary>
+        /// Instruction: Load memory into accumulator.
+        /// </summary>
+        /// <returns></returns>
+        byte LDA()
+        {
+            this.GetAluInput();
+            this.A = this.aluInput;
+            var isAccumulatorZero = this.A == 0x00;
+            var isAccumulatorNegative = (this.A & 0x80) > 0;
+            this.SetFlag(FLAGS6502.Z, isAccumulatorZero);
+            this.SetFlag(FLAGS6502.N, isAccumulatorNegative);
+            return 1;
+        }
+        /// <summary>
+        /// Instruction: Load memory into X register.
+        /// </summary>
+        /// <returns></returns>
+        byte LDX()
+        {
+            this.GetAluInput();
+            this.X = this.aluInput;
+            var isRegisterZero = this.X == 0x00;
+            var isRegisterNegative = (this.X & 0x80) > 0;
+            this.SetFlag(FLAGS6502.Z, isRegisterZero);
+            this.SetFlag(FLAGS6502.N, isRegisterNegative);
+            return 1;
+        }
+        /// <summary>
+        /// Instruction: Load memory into Y register.
+        /// </summary>
+        /// <returns></returns>
+        byte LDY()
+        {
+            this.GetAluInput();
+            this.Y = this.aluInput;
+            var isRegisterZero = this.Y == 0x00;
+            var isRegisterNegative = (this.Y & 0x80) > 0;
+            this.SetFlag(FLAGS6502.Z, isRegisterZero);
+            this.SetFlag(FLAGS6502.N, isRegisterNegative);
+            return 1;
+        }
         byte LSR() { return 0; }
+        /// <summary>
+        /// Instruction: No operation.
+        /// </summary>
+        /// <returns></returns>
         byte NOP() { return 0; }
         byte ORA() { return 0; }
         byte PHA() { return 0; }
@@ -446,7 +521,15 @@ namespace NESsie.Components
         byte SED() { return 0; }
         byte SEI() { return 0; }
         byte STA() { return 0; }
-        byte STX() { return 0; }
+        /// <summary>
+        /// Instruction: Store the value in the X register in memory.
+        /// </summary>
+        /// <returns></returns>
+        byte STX()
+        {
+            this.Bus.Write(this.absoluteAddress, this.X);
+            return 0;
+        }
         byte STY() { return 0; }
         byte TAX() { return 0; }
         byte TAY() { return 0; }

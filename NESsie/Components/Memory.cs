@@ -4,21 +4,24 @@ namespace NESsie.Components
 {
     public class Memory
     {
-        private readonly int[] WRAM;
-        private readonly Mapper Mapper;
-        private readonly AudioProcessingUnit APU;
-        private readonly PixelProcessingUnit PPU;
+        public readonly int Size;
+        private readonly byte[] WRAM;
 
-        public Memory(Mapper mapper)
+        public Memory()
         {
-            this.Mapper = mapper;
-            // The internal RAM of the console is 2KB - https://wiki.nesdev.com/w/index.php/CPU_memory_map
-            this.WRAM = Enumerable.Repeat(0xff, 0x800).ToArray();
+            this.Size = 64 * 1024;
+            this.WRAM = Enumerable.Repeat<byte>(0xFF, this.Size).ToArray();
         }
 
-        public void Write(int memoryAddress, int value)
+        public byte Read(ushort address)
         {
-            this.WRAM[memoryAddress] = value;
+            var data = this.WRAM[address];
+            return data;
+        }
+
+        public void Write(ushort address, byte data)
+        {
+            this.WRAM[address] = data;
         }
     }
 }
