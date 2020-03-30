@@ -9,15 +9,13 @@ namespace NESsie.Components
         public bool Verbose;
 
         public int Cycles { get; private set; }
+        public byte Opcode { get; private set; } = 0x00;
         public bool HasCompleted()
         {
             var hasCompleted = this.Cycles == 0;
             return hasCompleted;
         }
-
-        Bus Bus { get; set; }
         public readonly CpuInstruction[] InstructionSetOpcodeMatrix;
-
         public byte A { get; private set; } = 0x00;  // A register
         public byte X { get; private set; } = 0x00;  // X register
         public byte Y { get; private set; } = 0x00;  // Y register
@@ -25,7 +23,7 @@ namespace NESsie.Components
         public ushort ProgramCounter { get; private set; } = 0x00;
         public byte StackPointer { get; private set; } = 0x00;
 
-        public byte Opcode { get; private set; } = 0x00;
+        Bus Bus { get; set; }
         byte aluInput = 0x00;
         ushort absoluteAddress = 0x000; // The absolute memory address to be used in the current operation at any given time.
         ushort relativeAddress = 0x000; // The relative memory address to be used in the current branching operation if there is one.
@@ -517,12 +515,44 @@ namespace NESsie.Components
         byte RTI() { return 0; }
         byte RTS() { return 0; }
         byte SBC() { return 0; }
-        byte SEC() { return 0; }
-        byte SED() { return 0; }
-        byte SEI() { return 0; }
-        byte STA() { return 0; }
         /// <summary>
-        /// Instruction: Store the value in the X register in memory.
+        /// Instruction: Set the Carry flag.
+        /// </summary>
+        /// <returns></returns>
+        byte SEC()
+        {
+            this.SetFlag(FLAGS6502.C, true);
+            return 0;
+        }
+        /// <summary>
+        /// Instrction: Set the Decimal flag.
+        /// </summary>
+        /// <returns></returns>
+        byte SED()
+        {
+            this.SetFlag(FLAGS6502.D, true);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Set the Interrupt Disable flag.
+        /// </summary>
+        /// <returns></returns>
+        byte SEI()
+        {
+            this.SetFlag(FLAGS6502.I, true);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Store the value of the accumulator in memory.
+        /// </summary>
+        /// <returns></returns>
+        byte STA()
+        {
+            this.Bus.Write(this.absoluteAddress, this.A);
+            return 0;
+        }
+        /// <summary>
+        /// Instruction: Store the value of the X register in memory.
         /// </summary>
         /// <returns></returns>
         byte STX()
@@ -530,7 +560,15 @@ namespace NESsie.Components
             this.Bus.Write(this.absoluteAddress, this.X);
             return 0;
         }
-        byte STY() { return 0; }
+        /// <summary>
+        /// Instruction: Store the value of the Y register in memory.
+        /// </summary>
+        /// <returns></returns>
+        byte STY()
+        {
+            this.Bus.Write(this.absoluteAddress, this.Y);
+            return 0;
+        }
         byte TAX() { return 0; }
         byte TAY() { return 0; }
         byte TSX() { return 0; }
