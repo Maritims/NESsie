@@ -112,7 +112,10 @@ namespace NESsie.Components
         /// </summary>
         /// <returns></returns>
         byte XXX() { throw new NotImplementedException(); }
-        byte ADC() { throw new NotImplementedException(); }
+        byte ADC() {
+            this.GetAluInput();
+            return 1;
+        }
         /// <summary>
         /// Instruction: Bitwise logic AND
         /// Function: A & M
