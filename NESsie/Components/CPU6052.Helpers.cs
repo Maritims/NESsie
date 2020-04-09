@@ -38,6 +38,12 @@ namespace NESsie.Components
             return hasCompleted;
         }
 
+        private bool GetFlag(byte flag)
+        {
+            var isSet = (this.ProcessorStatus & flag) > 0;
+            return isSet;
+        }
+
         /// <summary>
         /// Sets or clears a flag in the status register.
         /// </summary>
